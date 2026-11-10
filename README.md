@@ -2,7 +2,7 @@
 
 基于 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet) 与 [Joseph-Blue 的 opt.23 优化分支](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization)，保留白龙娘的 35 段动作、拖动、吸边、自移动及 Codex 联动，进一步降低常驻内存、减少无效提醒并改善额度查询体验。
 
-当前版本 **0.5.1-local.2**，维护分支 **`local/windows`**。本分支完成了 Windows x64 验证；macOS 入口继承上游，尚未在本分支验收。
+当前版本 **0.5.1-local.3**，维护分支 **`local/windows`**。本分支完成了 Windows x64 验证；macOS 入口继承上游，尚未在本分支验收。
 
 ## 主要改动
 
@@ -12,6 +12,7 @@
 | 常用动作缓存 | 缓存常用动作的开头帧，上限 24 MiB，预读待机、拖动和落地等动作 |
 | 自适应清晰度 | 根据桌宠实际大小与所在窗口的 DPI 调整分辨率，最高 720×720 |
 | 动画调度 | 按素材帧率刷新，移动与吸边过渡保留 16 ms 更新 |
+| 平滑衔接 | 相近姿态的自然循环／自动衔接加入约 200 ms 的透明通道正确过渡，减轻首尾色差；拖动等手动操作即时切换 |
 | 性能设置 | 省内存、均衡、高清档位；支持单独调整分辨率、帧率和缓冲 |
 | 额度查询 | 先显示缓存和更新时间，较旧时后台刷新；合并重复请求，失败保留上次记录 |
 | 常驻额度签 | 可选开启；显示期间每 5 分钟刷新，隐藏时不自动查询 |
@@ -23,7 +24,9 @@
 
 ## 获取与构建
 
-本仓库提供源码和构建入口，动画从上游素材 Release 按需下载。
+**直接使用：** 下载 [Windows x64 完整运行包](https://github.com/moon135246/bailong-desktop-pet-optimization/releases/download/v0.5.1-local.3/bailong-desktop-pet-v0.5.1-local.3-windows-x86_64.zip)，完整解压后运行 `BailongPet/BailongPet.exe`。已包含 Python、Qt、透明解码器和 35 段动画，无需自行安装 Python 或下载素材。
+
+**自行构建：** 本仓库提供源码和构建入口，构建时从上游素材 Release 按需下载。
 
 1. 安装 Windows x64 的 Python 3.11～3.13。
 2. 克隆本仓库，打开 PowerShell，执行：
@@ -34,7 +37,7 @@ cd bailong-desktop-pet-optimization
 .\build-windows.ps1 -Zip
 ```
 
-输出目录：`dist-windows/build-v0.5.1-local.2/BailongPet/`。运行其中的 `BailongPet.exe`，保留完整目录。
+输出目录：`dist-windows/build-v0.5.1-local.3/BailongPet/`。运行其中的 `BailongPet.exe`，保留完整目录。
 
 已有依赖环境和完整素材时，也可运行：
 
@@ -49,6 +52,7 @@ python work/build_windows_optimized.py --existing-assets --zip
 - 单击互动，双击查询 Codex 额度；拖动可移动桌宠。
 - 右键打开「性能设置」「性能统计」，或开启「常驻显示额度」。
 - 右键「随 Codex / GPT 自动启动」控制启动联动。
+- 「平滑动画切换」默认开启，可在右键菜单关闭。
 - 动画可独立运行；额度、对话与任务同步使用使用者自己的 Codex 安装和登录。
 
 ## 验证与性能

@@ -14,6 +14,7 @@ from quota import read_quota, quota_windows
 from version import VERSION, BASE_VERSION, BRANCH, platform_version
 from movement import plan_movement, movement_fraction
 from frame_buffer import FrameBuffer
+from clip_transition import ClipTransition
 from performance_preferences import read_performance_preferences, decode_size, fps_cap
 from quota_cache import QuotaCache, QUOTA_REFRESH_INTERVAL_MS, QUOTA_RETRY_SECONDS
 from quota_badge import QuotaBadge
@@ -185,6 +186,8 @@ class Pet(QWidget):
         self.task_active=False
         self.manual_hidden=False;self.fullscreen_hidden=False;self.hidden_since=None
         self.settings=QSettings('BailongPet','DesktopPet')
+        self.smooth_switch_enabled=self.settings.value('smoothSwitchEnabled',True,type=bool)
+        self.natural_switch=False
         self.resolution,self.buffer_capacity,self.fps_limit,self.preload_whole=read_performance_preferences(self.settings)
         self.bubble_percent=max(50,min(150,self.settings.value('bubblePercent',100,type=int)))
         self.task_bubbles_disabled=self.settings.value('taskBubblesDisabled',False,type=bool)
@@ -365,6 +368,7 @@ class Pet(QWidget):
     def apply_visibility(self):
         self.stream.pause(self.desktop_hidden())
         if self.desktop_hidden():
+            self.transition=None
             if self.hidden_since is None:self.hidden_since=time.monotonic()
             self.dock_click_timer.stop()
             self.tick.stop();self.click_timer.stop();self.last_click=None;self.dragging=False
@@ -488,6 +492,11 @@ class Pet(QWidget):
         return ASSETS/(item.get('playbackFile') or item['file'].replace('.webm','.webp'))
     def play(self,item,mode):
         if self.dock_edge and mode!='idle':return
+        previous=None
+        if (self.natural_switch and self.smooth_switch_enabled and self.frames
+                and not self.dock_edge and not self.desktop_hidden()
+                and self.mode not in ('movement','drag') and mode not in ('movement','drag','landing','quota')):
+            previous=self.snapshot_frame().toImage()
         if self.movement_plan is not None:self.finish_movement()
         self.current=item;self.mode=mode;self.source_index=0;self.loading=True
         self.stream.play(self.asset_path(item),self.frame_size,item['durationMs']/1000,self.buffer_capacity,
@@ -496,7 +505,7 @@ class Pet(QWidget):
         self.update_tick_interval()
         if not self.desktop_hidden():self.tick.start()
         if getattr(self,'hidden_since',None) is not None:self.hidden_since=self.started
-        self.transition=None
+        self.transition=ClipTransition(previous) if previous is not None else None
         self.sync_dialogue_visibility()
         # Keep the return-to-idle and drag-to-landing paths ready ahead of a switch.
         upcoming=self.manifest.get('landingAnimation') if mode=='drag' else self.idles[0]
@@ -549,7 +558,10 @@ class Pet(QWidget):
         else:self.idle()
     def task_finished(self):
         self.task_active=False
-        if self.mode in ('work-start','working','idle'):self.idle()
+        if self.mode in ('work-start','working','idle'):
+            self.natural_switch=True
+            try:self.idle()
+            finally:self.natural_switch=False
     def return_transition_item(self,item):
         transition=item['returnTransition']
         return {'id':'return-'+item['id'],'file':transition['file'],
@@ -561,7 +573,8 @@ class Pet(QWidget):
     def update_tick_interval(self):
         now=time.monotonic()
         smooth=(self.mode=='movement' or self.dragging or bool(getattr(self,'dock_exit',None))
-                or bool(self.dock_edge and now-getattr(self,'dock_started',0)<.3))
+                or bool(self.dock_edge and now-getattr(self,'dock_started',0)<.3)
+                or bool(self.transition and self.transition.started is not None))
         rate=self.stream.rate
         interval=16 if self.loading or smooth or not rate else max(8,round(1000/rate))
         if self.tick.interval()!=interval:self.tick.setInterval(interval)
@@ -592,7 +605,10 @@ class Pet(QWidget):
                 QApplication.setWindowIcon(icon)
                 self.setWindowIcon(icon);self.tray.setIcon(icon)
                 if QSystemTrayIcon.isSystemTrayAvailable():self.tray.show()
-            if self.loading:self.loading=False;self.started=time.monotonic()
+            if self.loading:
+                self.loading=False;self.started=time.monotonic()
+                if self.transition and not self.transition.begin(self.sprite_image(),self.started):
+                    self.transition=None
             self.update_tick_interval()
             self.update_frame()
         if self.loading:return
@@ -602,19 +618,25 @@ class Pet(QWidget):
         # Reaching the inactivity deadline must not cut an idle clip short.
         if self.mode=='movement':self.advance_movement(elapsed)
         if elapsed>=duration:
-            if self.mode=='movement':self.finish_movement()
-            if self.mode=='drag':self.play(self.manifest.get('dragAnimation') or self.idles[0],'drag')
-            elif self.mode=='work-start' and self.task_active:
-                work=self.regular_work_animations()
-                if work:
-                    self.last_task_group='working';self.play(random.choice(work),'working')
+            self.natural_switch=True
+            try:
+                if self.mode=='movement':self.finish_movement()
+                if self.mode=='drag':self.play(self.manifest.get('dragAnimation') or self.idles[0],'drag')
+                elif self.mode=='work-start' and self.task_active:
+                    work=self.regular_work_animations()
+                    if work:
+                        self.last_task_group='working';self.play(random.choice(work),'working')
+                    else:self.idle()
+                elif self.mode=='variant' and self.current.get('returnTransition'):
+                    self.play(self.return_transition_item(self.current),'return-idle')
+                elif self.mode=='return-idle':self.play(self.idles[0],'idle')
                 else:self.idle()
-            elif self.mode=='variant' and self.current.get('returnTransition'):
-                self.play(self.return_transition_item(self.current),'return-idle')
-            elif self.mode=='return-idle':self.play(self.idles[0],'idle')
-            else:self.idle()
+            finally:self.natural_switch=False
             return
-        if self.transition:self.update()
+        if self.transition:
+            if self.transition.finished(time.monotonic()):
+                self.transition=None;self.update_tick_interval()
+            self.update()
     def paintEvent(self,event):
         if self.frames:
             painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
@@ -622,6 +644,17 @@ class Pet(QWidget):
             painter.end()
             if self.diagnostics:self.diagnostics.record(self.frames[self.index])
     def draw_frame(self,painter,canvas):
+        if self.transition and self.transition.started is not None:
+            image=self.transition.render(self.sprite_image(),time.monotonic())
+            painter.drawImage(canvas,image,QRectF(image.rect()))
+        else:self.draw_sprite(painter,canvas)
+    def sprite_image(self):
+        image=QImage(self.frame_size,self.frame_size,QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(Qt.GlobalColor.transparent)
+        painter=QPainter(image);painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        self.draw_sprite(painter,QRectF(image.rect()));painter.end()
+        return image
+    def draw_sprite(self,painter,canvas):
         painter.save()
         if self.dock_edge:
             # Rotate and slide the COMPLETE sprite beyond the edge. The
@@ -798,6 +831,8 @@ class Pet(QWidget):
         menu.addSeparator()
         menu.addAction('性能设置…',self.show_performance_settings)
         menu.addAction('性能统计…',self.show_diagnostics)
+        smooth=menu.addAction('平滑动画切换');smooth.setCheckable(True)
+        smooth.setChecked(self.smooth_switch_enabled);smooth.toggled.connect(self.set_smooth_switch_enabled)
         badge=menu.addAction('常驻显示额度');badge.setCheckable(True)
         badge.setChecked(self.quota_badge_enabled);badge.toggled.connect(self.set_quota_badge_enabled)
         menu.addAction('查询 Codex 额度',self.quota)
@@ -832,6 +867,10 @@ class Pet(QWidget):
             (enable_autostart if enabled else disable_autostart)()
         except (OSError,RuntimeError) as error:
             QMessageBox.warning(self,'自动启动设置失败',str(error))
+    def set_smooth_switch_enabled(self,enabled):
+        self.smooth_switch_enabled=enabled;self.settings.setValue('smoothSwitchEnabled',enabled)
+        if not enabled:
+            self.transition=None;self.update_tick_interval();self.update()
     def show_about(self):
         QMessageBox.about(self,'关于白龙桌宠',
             '<h3>GPT白龙娘动态桌宠</h3>'

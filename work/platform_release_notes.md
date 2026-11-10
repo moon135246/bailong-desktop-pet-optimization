@@ -19,6 +19,7 @@
 - 额度缓存 60 秒内复用；旧缓存先显示并后台刷新。
 - 常驻额度签默认关闭，开启后显示期间每 5 分钟刷新。
 - 单次工具失败不主动弹气泡，整轮失败、权限确认和完成提醒保留。
+- 平滑动画切换默认开启，在相近姿态的自然衔接处提供约 200 ms 的透明过渡，减轻首尾色差。
 
 角色与动作作者为 **jingh12312-rgb**；基础优化和四段 Alpha 修复来自 **Joseph-Blue**。素材按[上游 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization/releases/tag/v0.5.1-opt.assets.repaired.2)获取，原有来源和许可保留。
 

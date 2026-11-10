@@ -220,6 +220,8 @@ def frame_cache_statistics(pet):
             seen.add(key)
             size += frame.width() * frame.height() * frame.depth() // 8
     buffered=pet.stream.statistics()
+    transition=getattr(pet,'transition',None)
+    if transition:size+=transition.previous.sizeInBytes()
     clips={pet.current['id']} if pet.current else set()
     if pet.display_item:clips.add(pet.display_item['id'])
     if pet.reference_frame:clips.add(pet.idles[0]['id'])

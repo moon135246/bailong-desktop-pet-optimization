@@ -5,7 +5,7 @@ on:
       release_tag:
         description: Tag to publish
         required: true
-        default: v0.5.1-local.2
+        default: v0.5.1-local.3
       artifact_run_id:
         description: Reuse artifacts from a completed run; leave empty to build
         default: ''

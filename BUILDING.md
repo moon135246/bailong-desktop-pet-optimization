@@ -1,6 +1,6 @@
 # Windows 构建说明
 
-当前分支为 `local/windows`，版本 **0.5.1-local.2**。Python 3.11～3.13、Windows x64；本分支以 Windows 150% 缩放完成运行验收。macOS 构建入口继承上游，尚未在本分支验证。
+当前分支为 `local/windows`，版本 **0.5.1-local.3**。Python 3.11～3.13、Windows x64；本分支以 Windows 150% 缩放完成运行验收。macOS 构建入口继承上游，尚未在本分支验证。
 
 ## 一键构建
 
@@ -14,9 +14,10 @@
 
 兼容 Windows PowerShell 5.1 与 PowerShell 7+。首次运行选择 64 位 Python，在 `.build/venvs/windows/` 创建独立环境，按 `requirements-build.txt` 安装依赖。不会自动安装 Python，也不会调用 Microsoft Store 的解释器别名。
 
-- 程序目录：`dist-windows/build-v0.5.1-local.2/BailongPet/`。
-- 压缩包：`dist-windows/bailong-desktop-pet-v0.5.1-local.2-windows-x86_64.zip`。
+- 程序目录：`dist-windows/build-v0.5.1-local.3/BailongPet/`。
+- 压缩包：`dist-windows/bailong-desktop-pet-v0.5.1-local.3-windows-x86_64.zip`。
 - 运行整个目录中的 `BailongPet.exe`。
+- ZIP 包含 Python、Qt、FFmpeg、35 段动画、使用说明和许可。打包入口会拒绝包含账号缓存、聊天记录、运行诊断或自检产物的目录，并检查 ZIP 内部 CRC。
 
 ## 使用已有环境
 
@@ -48,7 +49,7 @@ python -m venv .venv
 
 ## 发布与验证
 
-`.github/workflows/build-platforms.yml` 为手动运行的构建工作流，默认标签 `v0.5.1-local.2`，macOS 构建默认关闭。按需启用工作流后，先创建对应源码标签，再手动运行。构建成功与运行验收分别记录。
+`.github/workflows/build-platforms.yml` 为手动运行的构建工作流，默认标签 `v0.5.1-local.3`，macOS 构建默认关闭。按需启用工作流后，先创建对应源码标签，再手动运行。构建成功与运行验收分别记录。
 
 [Windows 验证记录](docs/WINDOWS_VALIDATION.md) 包含本分支已执行的检查和采样范围。`app/selftest.py` 保留离线程序自检入口；`--self-test --quota-only` 会通过使用者自己的 Codex 登录只读查询额度。`--chat-only` 会发起真实模型对话，不属于离线检查。
 

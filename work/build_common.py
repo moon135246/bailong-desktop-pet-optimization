@@ -77,7 +77,7 @@ def copy_resources(destination, inputs):
     for name in ('README.md', 'CHANGELOG.md', 'ASSETS.md', 'BUILDING.md', 'DEVELOPMENT.md', '优化说明.md'):
         shutil.copy2(ROOT / name, destination / name)
     (destination / 'docs').mkdir(exist_ok=True)
-    for name in ('原作者版本改动对照.md', '修复素材备选包.md'):
+    for name in ('原作者版本改动对照.md', '修复素材备选包.md', 'WINDOWS_VALIDATION.md'):
         shutil.copy2(ROOT / 'docs' / name, destination / 'docs' / name)
     (destination / 'VERSION.txt').write_text(VERSION + '\n', encoding='utf-8')
     licenses = destination / 'licenses'
@@ -96,6 +96,23 @@ def copy_resources(destination, inputs):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, target)
     shutil.copy2(ROOT / 'app/sounds/Kenney-License.txt', licenses / 'Kenney-License.txt')
+    if sys.platform=='win32':
+        guide=(f'白龙桌宠 {VERSION} · Windows x64 完整运行包\n\n'
+            '1. 完整解压 ZIP，打开 BailongPet 文件夹，双击 BailongPet.exe。\n'
+            '2. 已包含 Python、Qt、透明解码器及35段动画，无需另装 Python。\n'
+            '3. 保留 _internal、app、outputs、tools 和 licenses，不要只复制 EXE。\n\n'
+            '单击互动，双击查询 Codex 额度；右键打开设置、性能统计与退出。\n'
+            '平滑动画切换默认开启，在相近姿态的自然衔接处提供约200毫秒过渡。\n'
+            '默认均衡档位与素材原帧率；常驻额度签、随 Codex / GPT 启动可在右键菜单开启。\n'
+            '普通动画无需 Codex；额度、对话和任务同步需要使用者自己的 Codex 安装与登录。\n'
+            '更新前退出旧版；移动程序目录前先关闭自动启动，移动后重新开启。\n\n'
+            '项目：https://github.com/moon135246/bailong-desktop-pet-optimization\n'
+            '角色与原始动画：jingh12312-rgb；基础优化与Alpha修复：Joseph-Blue。\n'
+            '素材与运行库来源、许可见 ASSETS.md 和 licenses。\n')
+        (destination/'先看我-使用说明.txt').write_text(guide,encoding='utf-8-sig')
+        for name,flag in (('开启随GPT自动启动.cmd','--enable-autostart'),
+                          ('关闭随GPT自动启动.cmd','--disable-autostart')):
+            (destination/name).write_text('@echo off\r\ncd /d "%~dp0"\r\nstart "" "%~dp0BailongPet.exe" '+flag+'\r\n',encoding='ascii',newline='')
 
 
 def place_ffmpeg(output, target, source):
@@ -160,7 +177,12 @@ def build_desktop(target, ffmpeg_arg=None, existing_assets=False):
                             dirs_exist_ok=True)
     info = {'version': VERSION, 'branch': BRANCH, 'platform': target, 'architecture': arch,
             'python': platform.python_version(),
-            'animationFiles': len(inputs[2]), 'validation': 'built; runtime acceptance pending'}
+            'animationFiles': len(inputs[2]), 'validation': 'Build completed; runtime validation is documented separately in docs/WINDOWS_VALIDATION.md'}
+    try:
+        revision=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True,text=True)
+        if revision.returncode==0:info['sourceCommit']=revision.stdout.strip()
+    except OSError:
+        pass  # Source ZIP builds may not have Git installed.
     (resources / 'BUILD_INFO.json').write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding='utf-8')
     if target == 'macos':
         import plistlib

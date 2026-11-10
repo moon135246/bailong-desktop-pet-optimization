@@ -3,18 +3,32 @@ import argparse
 from pathlib import Path
 import platform
 import shutil
+import zipfile
 from build_common import build_desktop
 from version import VERSION
 
 
 def archive_build(output):
     """Archive the freshly built directory, without running the legacy release script."""
+    forbidden={'auth.json','conversations.json','conversations.tmp','quota-cache.json',
+               '运行状态.json','自启动状态.json','显示诊断.json','检查报告.json',
+               '额度接口检查报告.json','对话接口检查报告.json','本机验证结果.json',
+               '检查预览.png','桌宠窗口预览.png'}
+    forbidden={name.casefold() for name in forbidden}
+    for path in output.rglob('*'):
+        if path.is_file() and (path.name.casefold() in forbidden or path.suffix.casefold() in ('.jsonl','.log')
+                              or any(part in ('.git','__pycache__') or part.startswith(('.venv','.build'))
+                                     for part in path.relative_to(output).parts)):
+            raise RuntimeError(f'运行目录包含本机状态或检查产物，不能打包：{path.relative_to(output)}')
     arch = platform.machine().lower()
     arch = {'amd64': 'x86_64', 'x64': 'x86_64', 'aarch64': 'arm64'}.get(arch, arch)
     name = output.parent.parent / f'bailong-desktop-pet-v{VERSION}-windows-{arch}'
     name.parent.mkdir(parents=True, exist_ok=True)
     archive = Path(shutil.make_archive(str(name), 'zip', root_dir=output.parent,
                                       base_dir=output.name))
+    with zipfile.ZipFile(archive) as bundle:
+        bad=bundle.testzip()
+        if bad:raise RuntimeError(f'ZIP 校验失败：{bad}')
     print(f'本地 ZIP：{archive}', flush=True)
     return archive
 

@@ -1,6 +1,6 @@
 # 开发说明
 
-本仓库维护 `local/windows` 分支，当前版本 `0.5.1-local.2`，基于 Joseph-Blue 的 `opt.23` 优化实现。原始角色及动作来自 jingh12312-rgb。当前验收范围为 Windows x64。
+本仓库维护 `local/windows` 分支，当前版本 `0.5.1-local.3`，基于 Joseph-Blue 的 `opt.23` 优化实现。原始角色及动作来自 jingh12312-rgb。当前验收范围为 Windows x64。
 
 ## 代码入口
 
@@ -8,6 +8,7 @@
 | --- | --- |
 | `app/pet.py` | 桌宠、动作、气泡、托盘与启动菜单 |
 | `app/frame_buffer.py`、`app/video_frames.py` | 有限缓冲、常用动作缓存、预读和透明解码 |
+| `app/clip_transition.py` | 相近姿态的短时透明过渡、轮廓匹配及预乘 Alpha 混合 |
 | `app/performance_preferences.py`、`app/performance_settings.py` | 性能默认值、档位及即时设置 |
 | `app/diagnostics.py`、`app/performance_metrics.py` | 按需显示性能与平台资源采样 |
 | `app/quota.py`、`app/quota_cache.py`、`app/quota_badge.py` | 只读额度连接、本机缓存与常驻额度签 |
