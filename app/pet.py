@@ -795,7 +795,10 @@ class Pet(QWidget):
         if sys.platform=='win32':
             from autostart import startup_entry
             launch=menu.addAction('随 Codex / GPT 自动启动');launch.setCheckable(True)
-            launch.setChecked(startup_entry().is_file());launch.toggled.connect(self.set_autostart_enabled)
+            try:launch.setChecked(startup_entry().is_file())
+            except (OSError,RuntimeError) as error:
+                launch.setEnabled(False);launch.setToolTip(str(error))
+            else:launch.toggled.connect(self.set_autostart_enabled)
         menu.addSeparator()
         menu.addAction('关闭对话模式' if self.chat and self.chat.enabled else '打开对话模式',self.toggle_chat)
         menu.addAction('查看历史对话',self.open_history)
