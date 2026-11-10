@@ -3,6 +3,7 @@ import os,subprocess,sys,shutil,re,threading
 from collections import deque
 from pathlib import Path
 from platform_support import resource_root
+from alpha_cleanup import clean_rgba
 
 def ffmpeg_path():
     root=resource_root()
@@ -14,8 +15,9 @@ def ffmpeg_path():
     if found:return found
     raise RuntimeError('缺少透明动画播放器，请重新完整解压桌宠安装包。')
 
-def rgba_frames(path,size,process_changed=None,rate_changed=None,fps=None):
-    filters=f'scale={size}:{size}:flags=lanczos'
+def rgba_frames(path,size,process_changed=None,rate_changed=None,fps=None,clean_edges=True):
+    # Area downsampling avoids Lanczos ringing outside an otherwise clean alpha.
+    filters=f'scale={size}:{size}:flags={"area" if clean_edges else "lanczos"}'
     if fps is not None:filters=f"fps='min(source_fps,{fps})',"+filters
     args=[ffmpeg_path(),'-hide_banner','-nostdin','-nostats','-loglevel','info' if rate_changed else 'error','-threads','2','-c:v','libvpx-vp9','-i',str(path),'-an','-vf',filters,'-pix_fmt','rgba','-threads','2','-f','rawvideo','pipe:1']
     kwargs={'creationflags':subprocess.CREATE_NO_WINDOW} if sys.platform=='win32' else {}
@@ -38,7 +40,7 @@ def rgba_frames(path,size,process_changed=None,rate_changed=None,fps=None):
                 if not raw:break
                 if len(raw)!=stride:raise RuntimeError('动画帧不完整：'+str(path))
                 if rate_changed and not rate_ready.wait(2):raise RuntimeError('FFmpeg 未提供素材帧率：'+str(path))
-                yield raw
+                yield clean_rgba(raw,size) if clean_edges else raw
             status=proc.wait();reader.join()
             if status!=0:raise RuntimeError('透明动画读取失败：'+''.join(errors)[-1000:])
         finally:

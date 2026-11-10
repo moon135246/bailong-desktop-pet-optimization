@@ -4,6 +4,7 @@ from pathlib import Path
 import threading
 
 from PIL import Image
+from alpha_cleanup import clean_alpha
 from video_frames import rgba_frames
 from performance_preferences import (DEFAULT_BUFFER_FRAMES, DEFAULT_RESOLUTION,
     DEFAULT_FPS_LIMIT, WARM_CACHE_BYTES, WARM_CACHE_FRAMES, decode_size, fps_cap)
@@ -30,19 +31,28 @@ class FrameBuffer:
         self.prefetch = deque(maxlen=6)
         self.active_key = None
         self.cache_hits = 0
+        self.clean_edges = True
         self.worker = threading.Thread(target=self.run, name='pet-frame-decoder', daemon=True)
         self.worker.start()
 
     @staticmethod
-    def key(path, size, fps):
-        return str(Path(path)), size, fps
+    def key(path, size, fps, clean_edges=True):
+        return str(Path(path)), size, fps, clean_edges
+
+    def set_edge_cleanup(self, enabled):
+        with self.condition:
+            self.clean_edges = bool(enabled)
+            self.warm_cache.clear()
+            self.warm_bytes = 0
+            self.prefetch.clear()
 
     def set_common_paths(self, paths):
         with self.condition:
             self.common_paths = {str(Path(path)) for path in paths}
 
     def _remember(self, key, rate, frames):
-        if not frames or rate is None or key[0] not in self.common_paths:
+        if (not frames or rate is None or key[0] not in self.common_paths
+                or key[3] != self.clean_edges):
             return
         frames = tuple(frames[:WARM_CACHE_FRAMES])
         size = sum(map(len, frames))
@@ -58,8 +68,8 @@ class FrameBuffer:
             self.warm_bytes -= sum(map(len, removed))
 
     def prepare(self, path, size, duration, fps=None):
-        key = self.key(path, size, fps)
         with self.condition:
+            key = self.key(path, size, fps, self.clean_edges)
             if (self.closed or key in self.warm_cache or key == self.active_key
                     or key[0] not in self.common_paths
                     or any(job[0] == key for job in self.prefetch)):
@@ -75,8 +85,8 @@ class FrameBuffer:
             self.prefetch = deque((job for job in self.prefetch if job[2] == size), maxlen=6)
 
     def play(self, path, size, duration, capacity, fps=fps_cap(DEFAULT_FPS_LIMIT), preload_whole=False):
-        key = self.key(path, size, fps)
         with self.condition:
+            key = self.key(path, size, fps, self.clean_edges)
             if self.closed:
                 raise RuntimeError('动画解码器已关闭')
             self.generation += 1
@@ -96,7 +106,7 @@ class FrameBuffer:
                     self.frames.append((index, index / self.rate, raw))
                 skip = len(self.frames)
                 self.cache_hits += 1
-            self.request = (self.generation, Path(path), size, duration, fps, skip)
+            self.request = (self.generation, Path(path), size, duration, fps, skip, self.clean_edges)
             for process in (self.process, self.prefetch_process):
                 if process and process.poll() is None:
                     process.kill()
@@ -163,11 +173,12 @@ class FrameBuffer:
                 self.rate = rate
                 self.count = round(self.duration * rate)
 
-    def decode(self, token, path, size, duration, fps):
+    def decode(self, token, path, size, duration, fps, clean_edges=True):
         if path.suffix.lower() == '.webm':
             yield from rgba_frames(path, size,
                 process_changed=lambda process: self.process_changed(token, process),
-                rate_changed=lambda rate: self.rate_changed(token, rate), fps=fps)
+                rate_changed=lambda rate: self.rate_changed(token, rate), fps=fps,
+                clean_edges=clean_edges)
         else:
             with Image.open(path) as source:
                 source_rate = source.n_frames / duration
@@ -175,14 +186,18 @@ class FrameBuffer:
                 self.rate_changed(token, output_rate)
                 for index in range(max(1, round(duration * output_rate))):
                     source.seek(min(source.n_frames - 1, int(index * source_rate / output_rate)))
-                    yield source.convert('RGBA').resize((size, size), Image.Resampling.LANCZOS).tobytes()
+                    frame = source.convert('RGBA').resize((size, size),
+                        Image.Resampling.BOX if clean_edges else Image.Resampling.LANCZOS)
+                    if clean_edges:
+                        frame.putalpha(clean_alpha(frame.getchannel('A')))
+                    yield frame.tobytes()
 
     def _prepare(self, token, job):
         key, path, size, duration, fps = job
         rate = []
         frames = rgba_frames(path, size,
             process_changed=lambda process: self.process_changed(token, process, prefetch=True),
-            rate_changed=lambda value: rate.append(value), fps=fps)
+            rate_changed=lambda value: rate.append(value), fps=fps, clean_edges=key[3])
         opening = []
         try:
             for _ in range(WARM_CACHE_FRAMES):
@@ -208,10 +223,10 @@ class FrameBuffer:
                 self.condition.wait_for(lambda: self.closed or self.request is not None)
                 if self.closed:
                     return
-                token, path, size, duration, fps, skip = self.request
+                token, path, size, duration, fps, skip, clean_edges = self.request
                 self.request = None
-                key = self.key(path, size, fps)
-            frames = self.decode(token, path, size, duration, fps)
+                key = self.key(path, size, fps, clean_edges)
+            frames = self.decode(token, path, size, duration, fps, clean_edges)
             index = 0
             opening = []
             try:

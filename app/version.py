@@ -4,7 +4,7 @@ import sys
 
 BASE_VERSION = '0.5.1'
 BRANCH = 'local/windows'
-BRANCH_REVISION = 3
+BRANCH_REVISION = 4
 VERSION = f'{BASE_VERSION}-local.{BRANCH_REVISION}'
 
 

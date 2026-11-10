@@ -18,6 +18,7 @@ source.mkdir(parents=True,exist_ok=True);(source/'app').mkdir(exist_ok=True)
 modules=['platform_support.py','mac_autostart.py','test_platform_support.py','test_preferences.py','desktop_task_sync.py','test_desktop_task_sync.py','pet.py','movement.py','test_movement.py','quota.py','autostart.py','prepare_assets.py','test_pet.py','selftest.py','version.py','test_quota.py','chat_backend.py','chat_ui.py','test_chat.py','desktop_visibility.py','test_visibility.py','test_session_reuse.py','test_task_notifications.py']
 modules.extend(['video_frames.py','frame_buffer.py','performance_settings.py','performance_metrics.py','diagnostics.py'])
 modules.extend(['diagnostic_identity.py','performance_preferences.py','performance_ui.py','task_activity.py'])
+modules.extend(['clip_transition.py','alpha_cleanup.py','quota_cache.py','quota_badge.py'])
 shutil.copy2(ROOT/'CHANGELOG.md',source/'CHANGELOG.md')
 for name in modules:shutil.copy2(ROOT/'app'/name,source/'app'/name)
 shutil.copytree(ROOT/'app/sounds',source/'app/sounds',dirs_exist_ok=True)

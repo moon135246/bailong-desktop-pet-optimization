@@ -2,7 +2,7 @@
 
 基于 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet) 与 [Joseph-Blue 的 opt.23 优化分支](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization)，保留白龙娘的 35 段动作、拖动、吸边、自移动及 Codex 联动，进一步降低常驻内存、减少无效提醒并改善额度查询体验。
 
-当前版本 **0.5.1-local.3**，维护分支 **`local/windows`**。本分支完成了 Windows x64 验证；macOS 入口继承上游，尚未在本分支验收。
+当前版本 **0.5.1-local.4**，维护分支 **`local/windows`**。本分支完成了 Windows x64 验证；macOS 入口继承上游，尚未在本分支验收。
 
 ## 主要改动
 
@@ -18,13 +18,13 @@
 | 常驻额度签 | 可选开启；显示期间每 5 分钟刷新，隐藏时不自动查询 |
 | 提醒分级 | 单次工具失败不主动弹气泡；整轮失败、权限确认及完成提醒保留 |
 | 启动联动 | 右键菜单可切换随 Codex / GPT 自动启动 |
-| 透明边缘 | 两段待机、拖动、落地采用上游 Alpha 清理素材，处理部分帧的边缘色块 |
+| 透明边缘 | 保留四段上游修复素材，并在全部动作播放时清理极低透明度残留及极小孤立噪点；缩小时减少轮廓外振铃，保留连接的细线和较大独立特效 |
 
 默认使用「均衡」：自适应清晰度、素材原帧率、12 帧缓冲。常驻额度签默认关闭。额度缓存 60 秒内复用，失败后的请求间隔至少 15 秒。
 
 ## 获取与构建
 
-**直接使用：** 下载 [Windows x64 完整运行包](https://github.com/moon135246/bailong-desktop-pet-optimization/releases/download/v0.5.1-local.3/bailong-desktop-pet-v0.5.1-local.3-windows-x86_64.zip)，完整解压后运行 `BailongPet/BailongPet.exe`。已包含 Python、Qt、透明解码器和 35 段动画，无需自行安装 Python 或下载素材。
+**直接使用：** 下载 [Windows x64 完整运行包](https://github.com/moon135246/bailong-desktop-pet-optimization/releases/download/v0.5.1-local.4/bailong-desktop-pet-v0.5.1-local.4-windows-x86_64.zip)，完整解压后运行 `BailongPet/BailongPet.exe`。已包含 Python、Qt、透明解码器和 35 段动画，无需自行安装 Python 或下载素材。
 
 **自行构建：** 本仓库提供源码和构建入口，构建时从上游素材 Release 按需下载。
 
@@ -37,7 +37,7 @@ cd bailong-desktop-pet-optimization
 .\build-windows.ps1 -Zip
 ```
 
-输出目录：`dist-windows/build-v0.5.1-local.3/BailongPet/`。运行其中的 `BailongPet.exe`，保留完整目录。
+输出目录：`dist-windows/build-v0.5.1-local.4/BailongPet/`。运行其中的 `BailongPet.exe`，保留完整目录。
 
 已有依赖环境和完整素材时，也可运行：
 
@@ -53,11 +53,12 @@ python work/build_windows_optimized.py --existing-assets --zip
 - 右键打开「性能设置」「性能统计」，或开启「常驻显示额度」。
 - 右键「随 Codex / GPT 自动启动」控制启动联动。
 - 「平滑动画切换」默认开启，可在右键菜单关闭。
+- 「透明边缘净化」默认开启，可在右键菜单关闭并即时对照。
 - 动画可独立运行；额度、对话与任务同步使用使用者自己的 Codex 安装和登录。
 
 ## 验证与性能
 
-已完成专项回归、Windows 打包自检、真实只读额度连接检查，以及四段修复动画的 336 帧对照。35 段动画首帧解码和缓冲上限检查通过，其余 31 段动画与原安装文件逐字节一致。
+已完成专项回归、Windows 打包自检、真实只读额度连接检查，以及四段修复动画的 336 帧对照。新增全部 35 段共 4,426 帧的边缘净化结构检查及白色／深色背景样例核对；保留连接主体的细线和较大特效，缓存仍有上限。动画文件沿用上游素材，净化在播放时完成。
 
 在同一台 Windows 电脑上，原版运行内存约 2.4～2.7 GB，优化版一次采样约 222 MiB，包含桌宠、FFmpeg 和启动监听。RSS 汇总可能重复计入共享页；这是实测样本，不代表所有设备。范围、方法与上游已有测试问题见 [Windows 验证记录](docs/WINDOWS_VALIDATION.md)。
 

@@ -187,6 +187,8 @@ class Pet(QWidget):
         self.manual_hidden=False;self.fullscreen_hidden=False;self.hidden_since=None
         self.settings=QSettings('BailongPet','DesktopPet')
         self.smooth_switch_enabled=self.settings.value('smoothSwitchEnabled',True,type=bool)
+        self.edge_cleanup_enabled=self.settings.value('edgeCleanupEnabled',True,type=bool)
+        self.stream.set_edge_cleanup(self.edge_cleanup_enabled)
         self.natural_switch=False
         self.resolution,self.buffer_capacity,self.fps_limit,self.preload_whole=read_performance_preferences(self.settings)
         self.bubble_percent=max(50,min(150,self.settings.value('bubblePercent',100,type=int)))
@@ -836,6 +838,8 @@ class Pet(QWidget):
         menu.addAction('性能统计…',self.show_diagnostics)
         smooth=menu.addAction('平滑动画切换');smooth.setCheckable(True)
         smooth.setChecked(self.smooth_switch_enabled);smooth.toggled.connect(self.set_smooth_switch_enabled)
+        edges=menu.addAction('透明边缘净化');edges.setCheckable(True)
+        edges.setChecked(self.edge_cleanup_enabled);edges.toggled.connect(self.set_edge_cleanup_enabled)
         badge=menu.addAction('常驻显示额度');badge.setCheckable(True)
         badge.setChecked(self.quota_badge_enabled);badge.toggled.connect(self.set_quota_badge_enabled)
         menu.addAction('查询 Codex 额度',self.quota)
@@ -874,6 +878,13 @@ class Pet(QWidget):
         self.smooth_switch_enabled=enabled;self.settings.setValue('smoothSwitchEnabled',enabled)
         if not enabled:
             self.transition=None;self.update_tick_interval();self.update()
+    def set_edge_cleanup_enabled(self,enabled):
+        self.edge_cleanup_enabled=bool(enabled);self.settings.setValue('edgeCleanupEnabled',self.edge_cleanup_enabled)
+        self.stream.set_edge_cleanup(self.edge_cleanup_enabled)
+        route=self.movement_plan
+        self.play(self.current,self.mode)
+        if route:self.movement_plan=(QPoint(self.pos()),route[1])
+        self.prepare_common_animations()
     def show_about(self):
         QMessageBox.about(self,'关于白龙桌宠',
             '<h3>GPT白龙娘动态桌宠</h3>'
