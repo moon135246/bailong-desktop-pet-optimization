@@ -15,9 +15,11 @@ from version import VERSION, BASE_VERSION, BRANCH, platform_version
 from movement import plan_movement, movement_fraction
 from frame_buffer import FrameBuffer
 from performance_preferences import read_performance_preferences, decode_size, fps_cap
+from quota_cache import QuotaCache, QUOTA_REFRESH_INTERVAL_MS, QUOTA_RETRY_SECONDS
+from quota_badge import QuotaBadge
 from performance_ui import readable_font, configure_linux_dialog
 
-from platform_support import resource_root,state_root,configure_mac_window
+from platform_support import resource_root,state_root,user_data,configure_mac_window
 ROOT=resource_root()
 STATE_ROOT=state_root()
 ASSETS=ROOT/'outputs/白龙桌宠素材'
@@ -133,7 +135,7 @@ class Bubble(QWidget):
         button=QPushButton('详情');button.setStyleSheet('color:#60358c;background:#eee5f7;border:0;border-radius:7px;padding:7px;')
         button.clicked.connect(lambda checked=False:details());self.layout.addWidget(button)
         self.set_scale_percent(self.scale_percent);self.show()
-    def quota(self,windows):
+    def quota(self,windows,updated_at=None,refreshing=False,error=None):
         self.is_size_preview=False
         self.is_task_bubble=False
         self.is_task_progress=False
@@ -147,6 +149,10 @@ class Bubble(QWidget):
             bar.setValue(round(value) if value is not None else 0);bar.setTextVisible(False);self.layout.addWidget(bar)
             if window['resetsAt']:
                 self.label('重置：'+datetime.fromtimestamp(window['resetsAt']).strftime('%m月%d日 %H:%M'))
+        if updated_at:
+            self.label('更新：'+datetime.fromtimestamp(updated_at).strftime('%m-%d %H:%M:%S'))
+        if refreshing:self.label('正在后台刷新…')
+        elif error:self.label('刷新失败，显示上次记录。\n'+error)
         self.set_scale_percent(self.scale_percent);self.show()
 
     def size_preview(self):
@@ -180,18 +186,30 @@ class Pet(QWidget):
         self.manual_hidden=False;self.fullscreen_hidden=False;self.hidden_since=None
         self.settings=QSettings('BailongPet','DesktopPet')
         self.resolution,self.buffer_capacity,self.fps_limit,self.preload_whole=read_performance_preferences(self.settings)
-        self.frame_size=decode_size(self.resolution,max(s.devicePixelRatio() for s in QApplication.screens()))
         self.bubble_percent=max(50,min(150,self.settings.value('bubblePercent',100,type=int)))
         self.task_bubbles_disabled=self.settings.value('taskBubblesDisabled',False,type=bool)
         self.sound_disabled=self.settings.value('soundDisabled',False,type=bool)
         self.bubble.set_scale_percent(self.bubble_percent)
         self.size_percent=max(50,min(200,self.settings.value('sizePercent',100,type=int)))
         pixels=round(256*self.size_percent/100);self.setFixedSize(pixels,pixels)
+        self.frame_size=self.desired_decode_size()
+        self.resolution_timer=QTimer(self);self.resolution_timer.setSingleShot(True)
+        self.resolution_timer.setInterval(120);self.resolution_timer.timeout.connect(self.refresh_decode_size)
+        self.quota_cache=QuotaCache(user_data()/'quota-cache.json')
+        self.quota_error=None;self.quota_bubble_requested=False;self.quota_generation=-1
+        self.last_quota_attempt=float('-inf');self.quota_request_account=None
+        self.quota_badge_enabled=self.settings.value('quotaBadgeEnabled',False,type=bool)
+        self.quota_badge=QuotaBadge();self.quota_badge.clicked.connect(self.quota)
+        self.quota_timer=QTimer(self);self.quota_timer.setInterval(QUOTA_REFRESH_INTERVAL_MS)
+        self.quota_timer.timeout.connect(self.background_quota_refresh);self.quota_timer.start()
         self.auto_hide_fullscreen=self.settings.value('autoHideFullscreen',True,type=bool)
         self.auto_movement_disabled=self.settings.value('autoMovementDisabled',False,type=bool)
         self.dock_edge=None
         self.work_slots=self.manifest.get('workAnimations',[])[:6]
         self.movement_slots=[v for v in self.manifest.get('movementAnimations',[]) if v and self.asset_path(v).is_file()]
+        self.common_animations=self.idles+[self.manifest[name] for name in
+            ('dragAnimation','landingAnimation','quotaAnimation') if self.manifest.get(name)]
+        self.stream.set_common_paths(self.asset_path(item) for item in self.common_animations)
         self.movement_plan=None;self.movement_mirrored=False;self.pointer_down=False
         self.last_interaction=time.monotonic();self.movement_ready_at=0.0
         self.click_timer=QTimer(self);self.click_timer.setTimerType(Qt.TimerType.PreciseTimer);self.click_timer.setSingleShot(True);self.click_timer.setInterval(250);self.click_timer.timeout.connect(self.single_click)
@@ -222,6 +240,9 @@ class Pet(QWidget):
         from desktop_task_sync import DesktopTaskSync
         self.desktop_sync=DesktopTaskSync(self)
         if QApplication.platformName()!='offscreen':QTimer.singleShot(1500,self.desktop_sync.start)
+        QTimer.singleShot(0,self.bind_window_screen)
+        QTimer.singleShot(600,self.prepare_common_animations)
+        if self.quota_badge_enabled:QTimer.singleShot(1800,self.background_quota_refresh)
     def setup_tray(self):
         # Use the default idle's first frame, independent of the current action.
         icon=QIcon(self.reference_frame) if self.reference_frame else QIcon()
@@ -245,6 +266,8 @@ class Pet(QWidget):
         self.note_interaction(cancel_movement=False)
         if reason==QSystemTrayIcon.ActivationReason.DoubleClick:self.set_manual_hidden(False)
     def eventFilter(self,obj,event):
+        if obj is self and event.type()==QEvent.Type.DevicePixelRatioChange:
+            self.schedule_resolution_update()
         if event.type() in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonRelease,
                             QEvent.Type.MouseMove,QEvent.Type.KeyPress,QEvent.Type.Wheel):
             roots=[self,self.bubble]
@@ -353,6 +376,7 @@ class Pet(QWidget):
                 self.started+=time.monotonic()-self.hidden_since;self.hidden_since=None
             self.ensure_on_screen();self.show();self.tick.start()
             self.sync_dialogue_visibility()
+        self.update_quota_badge()
         if hasattr(self,'tray'):
             state='已隐藏' if self.manual_hidden else ('全屏时自动隐藏' if self.fullscreen_hidden else '正在陪伴主人')
             self.tray.setToolTip('GPT白龙娘桌宠 · '+state)
@@ -413,7 +437,35 @@ class Pet(QWidget):
         self.update()
     def watch_screen(self,screen):
         screen.availableGeometryChanged.connect(lambda area:self.ensure_on_screen())
+        screen.logicalDotsPerInchChanged.connect(lambda dpi:self.schedule_resolution_update())
         QTimer.singleShot(0,self.ensure_on_screen)
+    def bind_window_screen(self):
+        window=self.windowHandle()
+        if window and not getattr(self,'window_screen_bound',False):
+            window.screenChanged.connect(lambda screen:self.schedule_resolution_update())
+            self.window_screen_bound=True
+        self.schedule_resolution_update()
+    def desired_decode_size(self):
+        screen=QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
+        window=self.windowHandle()
+        ratio=(window.devicePixelRatio() if window and window.screen() is screen else screen.devicePixelRatio())
+        return decode_size(self.resolution,ratio,self.width())
+    def schedule_resolution_update(self):
+        if hasattr(self,'resolution_timer') and self.resolution==0:
+            self.resolution_timer.start()
+    def refresh_decode_size(self):
+        size=self.desired_decode_size()
+        if size==self.frame_size:return
+        self.frame_size=size;self.stream.clear_other_sizes(size)
+        if self.current:
+            route=self.movement_plan
+            self.play(self.current,self.mode)
+            if route:self.movement_plan=(QPoint(self.pos()),route[1])
+        self.prepare_common_animations()
+    def prepare_common_animations(self):
+        for item in self.common_animations:
+            self.stream.prepare(self.asset_path(item),self.frame_size,item['durationMs']/1000,
+                                fps=fps_cap(self.fps_limit))
     def ensure_on_screen(self):
         position=self.constrained_position(self.pos())
         if position!=self.pos():
@@ -425,6 +477,12 @@ class Pet(QWidget):
     def moveEvent(self,event):
         super().moveEvent(event)
         if getattr(self,'chat',None):self.chat.position()
+        self.schedule_resolution_update()
+        if hasattr(self,'quota_badge'):self.position_quota_badge()
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        self.schedule_resolution_update()
+        if hasattr(self,'quota_badge'):self.position_quota_badge()
     def asset_path(self,item):
         # Optional playbackFile allows future formats without changing the manifest's video source.
         return ASSETS/(item.get('playbackFile') or item['file'].replace('.webm','.webp'))
@@ -435,10 +493,15 @@ class Pet(QWidget):
         self.stream.play(self.asset_path(item),self.frame_size,item['durationMs']/1000,self.buffer_capacity,
                          fps=fps_cap(self.fps_limit),preload_whole=self.preload_whole)
         self.started=time.monotonic()
+        self.update_tick_interval()
         if not self.desktop_hidden():self.tick.start()
         if getattr(self,'hidden_since',None) is not None:self.hidden_since=self.started
         self.transition=None
         self.sync_dialogue_visibility()
+        # Keep the return-to-idle and drag-to-landing paths ready ahead of a switch.
+        upcoming=self.manifest.get('landingAnimation') if mode=='drag' else self.idles[0]
+        if upcoming:self.stream.prepare(self.asset_path(upcoming),self.frame_size,
+            upcoming['durationMs']/1000,fps=fps_cap(self.fps_limit))
     def idle(self):
         if self.dock_edge:
             self.play(random.choices(self.idles,weights=[7,3][:len(self.idles)])[0],'idle')
@@ -495,11 +558,22 @@ class Pet(QWidget):
         # Windows layered windows use per-pixel alpha. A binary mask would
         # dither the soft character edges and damage transparent rendering.
         self.update()
+    def update_tick_interval(self):
+        now=time.monotonic()
+        smooth=(self.mode=='movement' or self.dragging or bool(getattr(self,'dock_exit',None))
+                or bool(self.dock_edge and now-getattr(self,'dock_started',0)<.3))
+        rate=self.stream.rate
+        interval=16 if self.loading or smooth or not rate else max(8,round(1000/rate))
+        if self.tick.interval()!=interval:self.tick.setInterval(interval)
     def animate(self):
         # Edge motion remains responsive while a new clip's first frame loads.
         if getattr(self,'dock_exit',None) and time.monotonic()-self.dock_exit[0]>=.3:
             self.undock();self.idle()
-        if self.dock_edge:self.update()
+        docking=bool(self.dock_edge and (getattr(self,'dock_exit',None)
+                     or time.monotonic()-getattr(self,'dock_started',0)<.3))
+        if docking or getattr(self,'was_docking',False):self.update()
+        self.was_docking=docking
+        self.update_tick_interval()
         elapsed=0 if self.loading else time.monotonic()-self.started
         try:frame=self.stream.take(elapsed)
         except RuntimeError as error:
@@ -519,6 +593,7 @@ class Pet(QWidget):
                 self.setWindowIcon(icon);self.tray.setIcon(icon)
                 if QSystemTrayIcon.isSystemTrayAvailable():self.tray.show()
             if self.loading:self.loading=False;self.started=time.monotonic()
+            self.update_tick_interval()
             self.update_frame()
         if self.loading:return
         duration=self.current.get('durationMs',4000)/1000
@@ -623,17 +698,24 @@ class Pet(QWidget):
         self.bubble_timer.stop();self.bubble.message(text);self.position_bubble()
         if ms:self.bubble_timer.start(ms)
     def dismiss_bubble(self):
+        self.quota_bubble_requested=False
         self.bubble_timer.stop()
         self.bubble.hide()
         if self.mode=='quota':self.idle()
     def task_result(self,title,text,details):
         if self.task_bubbles_disabled:return
         if self.speech_hidden():return
+        self.quota_bubble_requested=False
         self.generation+=1;self.bubble_timer.stop()
         self.bubble.task_result(title,text,details);self.position_bubble();self.bubble_timer.start(20000)
     def task_progress(self,title,text,details):
+        if title=='工具进度':
+            self.last_tool_status=text
+            if text.startswith(('命令执行失败','本次调用失败','调用已中断','调用已拒绝')):
+                return
         if self.task_bubbles_disabled:return
         if self.desktop_hidden():return
+        self.quota_bubble_requested=False
         self.bubble_timer.stop()
         if getattr(self.bubble,'is_task_progress',False) and self.bubble.isVisible():
             view=self.bubble.result_view;bar=view.verticalScrollBar()
@@ -677,6 +759,10 @@ class Pet(QWidget):
         menu.addSeparator()
         automatic=menu.addAction('全屏时自动隐藏');automatic.setCheckable(True)
         automatic.setChecked(self.auto_hide_fullscreen);automatic.toggled.connect(self.set_auto_hide_fullscreen)
+        if sys.platform=='win32':
+            from autostart import startup_entry
+            launch=menu.addAction('随 Codex / GPT 自动启动');launch.setCheckable(True)
+            launch.setChecked(startup_entry().is_file());launch.toggled.connect(self.set_autostart_enabled)
         menu.addSeparator()
         menu.addAction('关闭对话模式' if self.chat and self.chat.enabled else '打开对话模式',self.toggle_chat)
         menu.addAction('查看历史对话',self.open_history)
@@ -712,6 +798,9 @@ class Pet(QWidget):
         menu.addSeparator()
         menu.addAction('性能设置…',self.show_performance_settings)
         menu.addAction('性能统计…',self.show_diagnostics)
+        badge=menu.addAction('常驻显示额度');badge.setCheckable(True)
+        badge.setChecked(self.quota_badge_enabled);badge.toggled.connect(self.set_quota_badge_enabled)
+        menu.addAction('查询 Codex 额度',self.quota)
         menu.addAction('关于…',self.show_about)
         menu.addAction('退出桌宠',self.close)
         return menu
@@ -732,10 +821,17 @@ class Pet(QWidget):
         self.settings.setValue('animationBufferFrames',capacity)
         self.settings.setValue('animationFPSLimit',fps_limit)
         self.settings.setValue('preloadWholeAnimation',preload_whole)
-        self.frame_size=decode_size(resolution,max(s.devicePixelRatio() for s in QApplication.screens()))
+        self.frame_size=self.desired_decode_size();self.stream.clear_other_sizes(self.frame_size)
         route=self.movement_plan
         self.play(self.current,self.mode)
         if route:self.movement_plan=(QPoint(self.pos()),route[1])
+        self.prepare_common_animations()
+    def set_autostart_enabled(self,enabled):
+        from autostart import enable_autostart,disable_autostart
+        try:
+            (enable_autostart if enabled else disable_autostart)()
+        except (OSError,RuntimeError) as error:
+            QMessageBox.warning(self,'自动启动设置失败',str(error))
     def show_about(self):
         QMessageBox.about(self,'关于白龙桌宠',
             '<h3>GPT白龙娘动态桌宠</h3>'
@@ -894,20 +990,62 @@ class Pet(QWidget):
         self.click_timer.stop();self.last_click=None;self.generation+=1;token=self.generation
         self.play_click_sound()
         if not self.dock_edge:self.play(self.manifest.get('quotaAnimation') or self.idles[0],'quota')
-        self.say('让我看看额度还有多少。。。。。。',0)
-        if self.quota_inflight:
-            # Repeated requests share the in-flight read; delivery uses the newest generation.
-            self.quota_generation=token;return
-        self.quota_generation=token;self.quota_inflight=True;self.worker=QuotaWorker(self)
-        self.worker.ready.connect(self.quota_ready);self.worker.failed.connect(self.quota_failed);self.worker.start()
+        self.quota_generation=token;self.quota_bubble_requested=True
+        self.quota_cache.validate_account()
+        if self.quota_cache.fresh():
+            self.show_cached_quota();return
+        refreshing=self.start_quota_refresh()
+        if self.quota_cache.windows:self.show_cached_quota(refreshing=refreshing)
+        elif refreshing:self.say('正在查询 Codex 额度…',0)
+        else:self.say('额度暂时未更新。\n'+(self.quota_error or '请稍后重试。'),8000)
+    def start_quota_refresh(self):
+        if self.quota_inflight:return True
+        if time.monotonic()-self.last_quota_attempt<QUOTA_RETRY_SECONDS:return False
+        self.last_quota_attempt=time.monotonic();self.quota_inflight=True
+        self.quota_request_account=self.quota_cache.revision()
+        worker=QuotaWorker(self);self.worker=worker
+        worker.ready.connect(self.quota_ready);worker.failed.connect(self.quota_failed)
+        worker.finished.connect(lambda w=worker:self.quota_worker_finished(w))
+        worker.finished.connect(worker.deleteLater);worker.start()
+        self.update_quota_badge();return True
+    def quota_worker_finished(self,worker):
+        if self.worker is worker:self.worker=None
+    def show_cached_quota(self,refreshing=False):
+        if not self.quota_bubble_requested or self.quota_generation!=self.generation or self.speech_hidden():return
+        self.bubble.quota(self.quota_cache.windows,self.quota_cache.updated_at,
+                         refreshing=refreshing,error=None if refreshing else self.quota_error)
+        self.position_bubble();self.bubble_timer.start(12000)
     def quota_ready(self,windows):
         self.quota_inflight=False
-        if self.speech_hidden():return
-        if self.quota_generation!=self.generation:return
-        self.bubble.quota(windows);self.position_bubble();self.bubble_timer.start(12000)
+        if self.quota_request_account!=self.quota_cache.revision():
+            self.quota_cache.validate_account()
+            self.quota_failed('登录状态已变化，请重新查询额度。');return
+        self.quota_cache.update(windows);self.quota_error=None
+        self.show_cached_quota();self.update_quota_badge()
     def quota_failed(self,error):
         self.quota_inflight=False
-        if self.quota_generation==self.generation:self.say('主人，我暂时没查到额度，过一会儿再看看好不好？\n'+error,8000)
+        self.quota_error=str(error)
+        if self.quota_bubble_requested and self.quota_generation==self.generation:
+            if self.quota_cache.windows:self.show_cached_quota()
+            else:self.say('额度刷新失败。\n'+str(error),8000)
+        self.update_quota_badge()
+    def background_quota_refresh(self):
+        if self.quota_badge_enabled and not self.desktop_hidden() and not self.quota_cache.fresh():
+            self.start_quota_refresh()
+        self.update_quota_badge()
+    def set_quota_badge_enabled(self,enabled):
+        self.quota_badge_enabled=enabled;self.settings.setValue('quotaBadgeEnabled',enabled)
+        self.background_quota_refresh()
+    def position_quota_badge(self):
+        screen=QApplication.screenAt(self.frameGeometry().center()) or QApplication.primaryScreen()
+        area=screen.availableGeometry();badge=self.quota_badge
+        y=self.y()-badge.height()-6
+        if y<area.top():y=self.y()+self.height()+6
+        badge.move(clamp_position(QPoint(self.x()+(self.width()-badge.width())//2,y),badge.size(),area))
+    def update_quota_badge(self):
+        self.quota_badge.refresh(self.quota_cache,self.quota_inflight,self.quota_error)
+        self.position_quota_badge()
+        self.quota_badge.setVisible(self.quota_badge_enabled and not self.desktop_hidden())
     def mousePressEvent(self,event):
         if event.button()==Qt.MouseButton.LeftButton and self.dock_edge:
             self.consume_dock_release=True;self.pointer_down=False
@@ -963,6 +1101,7 @@ class Pet(QWidget):
         if self.chat and not self.chat.shutdown():
             event.ignore();QTimer.singleShot(500,self.close);return
         self.desktop_sync.stop()
+        self.quota_timer.stop();self.resolution_timer.stop();self.quota_badge.close()
         self.stream.close()
         if self.diagnostics:self.diagnostics.close()
         self.tick.stop();self.visibility_timer.stop();self.tray.hide();self.bubble.close()

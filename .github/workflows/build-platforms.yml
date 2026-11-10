@@ -1,18 +1,18 @@
-name: Build and release Windows and macOS
+name: Build Windows and optional macOS
 on:
   workflow_dispatch:
     inputs:
       release_tag:
         description: Tag to publish
         required: true
-        default: v0.5.1-opt.23
+        default: v0.5.1-local.2
       artifact_run_id:
         description: Reuse artifacts from a completed run; leave empty to build
         default: ''
       build_macos:
         description: Build macOS arm64
         type: boolean
-        default: true
+        default: false
 permissions:
   contents: read
 env:
@@ -103,7 +103,7 @@ jobs:
         run: |
           mkdir -p .build
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG · Windows / macOS" --notes '构建产物正在上传。'
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG · Desktop build" --notes '构建产物正在上传。'
           fi
           mapfile -d '' package_files < <(find packages -type f \( -name "bailong-desktop-pet-${RELEASE_TAG}-windows-x86_64.zip" -o -name "bailong-desktop-pet-${RELEASE_TAG}-macos-arm64.zip" \) -print0)
           gh release upload "$RELEASE_TAG" "${package_files[@]}" --clobber

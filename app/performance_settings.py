@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
                                QWidget, QStyle, QStyleOptionFocusRect)
 from performance_ui import Columns, configure_window
 from performance_preferences import (MIN_BUFFER_FRAMES, MAX_BUFFER_FRAMES,
-                                     DEFAULT_RESOLUTION, DEFAULT_BUFFER_FRAMES, DEFAULT_FPS_LIMIT)
+                                     DEFAULT_RESOLUTION, DEFAULT_BUFFER_FRAMES, DEFAULT_FPS_LIMIT,
+                                     PERFORMANCE_PRESETS)
 
 
 class ToggleSwitch(QCheckBox):
@@ -41,10 +42,20 @@ class PerformanceSettings(QDialog):
         configure_window(self)
         self.pet = pet
         self.setWindowTitle('性能设置')
-        self.resize(740, 250)
+        self.resize(740, 310)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 20)
         layout.setSpacing(20)
+        presets = QHBoxLayout()
+        presets.addWidget(QLabel('性能档位'))
+        self.preset = QComboBox()
+        self.preset.setAccessibleName('性能档位')
+        for label, values in PERFORMANCE_PRESETS:
+            self.preset.addItem(label, values)
+        self.preset.addItem('自定义', None)
+        presets.addWidget(self.preset)
+        presets.addStretch()
+        layout.addLayout(presets)
         playback = QWidget()
         buffer = QWidget()
         forms = [QFormLayout(group) for group in (playback, buffer)]
@@ -55,11 +66,11 @@ class PerformanceSettings(QDialog):
             form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.quality = QComboBox()
         for label, value in (('原画 720×720', 720), ('较高 512×512', 512),
-                             ('中 384×384', 384), ('低 256×256', 256), ('跟随屏幕', 0)):
+                             ('中 384×384', 384), ('低 256×256', 256), ('跟随桌宠大小与屏幕', 0)):
             self.quality.addItem(label, value)
         self.quality.setCurrentIndex(self.quality.findData(pet.resolution))
         self.fps = QComboBox()
-        for label, value in (('满帧 (≥ 24 FPS)', 'full'), ('20 FPS', '20'), ('15 FPS', '15')):
+        for label, value in (('素材原帧率', 'full'), ('20 FPS', '20'), ('15 FPS', '15')):
             self.fps.addItem(label, value)
         self.fps.setCurrentIndex(self.fps.findData(pet.fps_limit))
         self.capacity = QLineEdit(str(pet.buffer_capacity))
@@ -117,6 +128,7 @@ class PerformanceSettings(QDialog):
         self.capacity.editingFinished.connect(self.commit_capacity)
         self.buffer_slider.valueChanged.connect(self.slider_changed)
         self.preload.toggled.connect(self.apply)
+        self.preset.currentIndexChanged.connect(self.apply_preset)
         self.refresh()
 
     def capacity_value(self):
@@ -140,6 +152,26 @@ class PerformanceSettings(QDialog):
     def refresh(self):
         self.preload_state.setText('已开启' if self.preload.isChecked() else '已关闭')
         self.buffer_controls.setEnabled(not self.preload.isChecked())
+        selected = (self.quality.currentData(), self.buffer_slider.value(),
+                    self.fps.currentData(), self.preload.isChecked())
+        index = next((i for i, (_, values) in enumerate(PERFORMANCE_PRESETS)
+                      if selected == values), len(PERFORMANCE_PRESETS))
+        with QSignalBlocker(self.preset):
+            self.preset.setCurrentIndex(index)
+
+    def apply_preset(self, index):
+        values = self.preset.itemData(index)
+        if values is None:
+            return
+        resolution, capacity, fps, preload = values
+        with (QSignalBlocker(self.quality), QSignalBlocker(self.buffer_slider),
+              QSignalBlocker(self.fps), QSignalBlocker(self.preload)):
+            self.quality.setCurrentIndex(self.quality.findData(resolution))
+            self.capacity.setText(str(capacity))
+            self.buffer_slider.setValue(capacity)
+            self.fps.setCurrentIndex(self.fps.findData(fps))
+            self.preload.setChecked(preload)
+        self.apply()
 
     def apply(self):
         selected = (self.quality.currentData(), self.buffer_slider.value(),

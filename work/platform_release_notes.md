@@ -1,6 +1,6 @@
-# 白龙桌宠 {{TAG}}
+# 白龙桌宠 {{TAG}} · Windows 优化版
 
-Windows／macOS 独立构建的完整运行包，包含 Python/Qt、FFmpeg、完整动画和音效。解压整个目录后运行，保留附带的依赖和素材文件。
+基于 jingh12312-rgb 原项目与 Joseph-Blue opt.23 优化分支，增加常用动作缓存、额度缓存与可选额度签、性能档位、按尺寸和 DPI 调整清晰度，以及按素材帧率调度。两段待机、拖动与落地使用上游透明边缘修复素材。
 
 ## 下载
 
@@ -8,28 +8,18 @@ Windows／macOS 独立构建的完整运行包，包含 Python/Qt、FFmpeg、完
 | --- | --- |
 {{DOWNLOAD_ROWS}}
 
-本次仅提供 Windows x86_64 与 macOS arm64。附件分批上传，表格只显示已上传的包；Linux 支援暂停。
+解压并保留完整目录，Windows 运行 `BailongPet/BailongPet.exe`。动画可独立运行，Codex 联动使用使用者自己的安装和登录。
 
-## 运行
+当前分支只有 Windows x64 实机验证记录。macOS 构建为继承的可选入口，默认关闭；只有已上传的产物才会列入表格。
 
-- Windows：运行 `BailongPet/BailongPet.exe`。
-- macOS：运行 `BailongPet.app`。macOS App 使用本地签名，未做 Apple 公证。如首次打开被系统拦截，点击“完成”，随后在“系统设置 → 隐私与安全性”下滑找到本 App 列表，选择“仍要打开”，参见 [Apple 操作说明](https://support.apple.com/zh-cn/102445)。
-- Codex 对话、额度与同步功能使用用户自己的 Codex 安装和登录；运行包不包含账号或聊天记录。
+## 默认设置
 
-## 本轮变化与说明
+- 均衡档位：自适应清晰度、素材原帧率、12 帧缓冲。
+- 常用动作开头帧缓存上限 24 MiB；隐藏时暂停解码。
+- 额度缓存 60 秒内复用；旧缓存先显示并后台刷新。
+- 常驻额度签默认关闭，开启后显示期间每 5 分钟刷新。
+- 单次工具失败不主动弹气泡，整轮失败、权限确认和完成提醒保留。
 
-- 暂停 Linux 支援，移除 Debian／Fedora／Arch 构建脚本、RPM 工具和 CI 任务；当前仅交付 Windows 与 macOS。
+角色与动作作者为 **jingh12312-rgb**；基础优化和四段 Alpha 修复来自 **Joseph-Blue**。素材按[上游 Release](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization/releases/tag/v0.5.1-opt.assets.repaired.2)获取，原有来源和许可保留。
 
-- 任务进度和完成气泡按实际文字高度收缩，长内容变短时收回空白；长结果仍可滚动。
-- 各平台性能统计移除“详情”按钮，保留悬停全文与复制信息；任务气泡的详情入口保留。
-- 性能设置即时保存并生效，移除“应用”按钮；全新配置和恢复默认使用 512×512。
-- 桌宠角色窗口关闭系统阴影；Windows EXE 与 macOS App 使用修复 idle 第一帧图标。
-- macOS 桌宠、气泡与临时输入窗改为不参与全屏空间，辅助检测按完整屏幕边界处理；与用户指定的原生工程一致，Windows 检测逻辑不变。
-- macOS 构建默认自动编译并复用精简 FFmpeg；素材下载显示已下载／总大小、百分比和实时网速。
-- 四段修复素材采用 720×720、24 FPS 的透明 WebM，保留最高画质档位，默认播放仍为 512×512。
-- 提供[四段修复备选素材包](https://github.com/{{REPO}}/releases/tag/v0.5.1-opt.assets.repaired.2)，所有构建脚本默认使用该包，原始包另行保留。
-- 所有应用构建入口自动准备修复素材；原版清单自动切换，已有动画文件保留。素材来自原作者 **jingh12312-rgb**；下载私有仓库附件需要相应 GitHub 权限。
-
-[更新记录](https://github.com/{{REPO}}/blob/{{TAG}}/CHANGELOG.md) · [构建说明、运行依赖与数据目录](https://github.com/{{REPO}}/blob/{{TAG}}/BUILDING.md) · [项目主页](https://github.com/{{REPO}}/tree/{{TAG}}) · [素材说明](https://github.com/{{REPO}}/blob/{{TAG}}/ASSETS.md) · [原作者项目](https://github.com/jingh12312-rgb/bailong-desktop-pet)
-
-包构建完成不代表两平台均已完成人工界面验收。下载运行包请使用上方平台链接；页面底部的 Source code 是 GitHub 自动生成的源码快照。
+[更新记录](https://github.com/{{REPO}}/blob/{{TAG}}/CHANGELOG.md) · [构建说明](https://github.com/{{REPO}}/blob/{{TAG}}/BUILDING.md) · [验证范围](https://github.com/{{REPO}}/blob/{{TAG}}/docs/WINDOWS_VALIDATION.md) · [项目主页](https://github.com/{{REPO}}/tree/{{TAG}})

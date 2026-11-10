@@ -37,3 +37,13 @@ work/video-deps/
 
 # Removed obsolete upstream macOS guide
 /MAC适配说明.md
+
+# Local runtime data and diagnostic captures
+app/显示诊断.json
+app/桌宠窗口预览.png
+quota-cache.json
+conversations.json
+conversations.tmp
+本机验证结果.json
+额度接口检查报告.json
+对话接口检查报告.json

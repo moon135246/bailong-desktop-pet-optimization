@@ -23,8 +23,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ffmpeg', help='本机 FFmpeg 可执行文件路径')
     parser.add_argument('--zip', action='store_true', help='构建完成后生成本地 ZIP')
+    parser.add_argument('--existing-assets', action='store_true', help='使用已安装的完整素材，不下载或替换动画')
     args = parser.parse_args(argv)
-    output = build_desktop('windows', ffmpeg_arg=args.ffmpeg)
+    output = build_desktop('windows', ffmpeg_arg=args.ffmpeg, existing_assets=args.existing_assets)
     if args.zip:
         archive_build(output)
 

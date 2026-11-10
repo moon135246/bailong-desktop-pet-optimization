@@ -1,11 +1,11 @@
-# Keep the author's base version; opt.N is this branch's SemVer prerelease.
+# Keep the author's base version; local.N identifies this private Windows build.
 import platform
 import sys
 
 BASE_VERSION = '0.5.1'
-BRANCH = 'joseph/optimization'
-BRANCH_REVISION = 23
-VERSION = f'{BASE_VERSION}-opt.{BRANCH_REVISION}'
+BRANCH = 'local/windows'
+BRANCH_REVISION = 2
+VERSION = f'{BASE_VERSION}-local.{BRANCH_REVISION}'
 
 
 def platform_version():

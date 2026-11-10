@@ -1,67 +1,66 @@
-# 白龙桌宠 v0.5.1 · 优化与修复
+# 白龙桌宠 · Windows 优化版
 
-基于 [jingh12312-rgb 原作者 v0.5.1](https://github.com/jingh12312-rgb/bailong-desktop-pet/tree/b102e734f20bb50889af12df5778f1499109f41b)，整理可反哺原项目的性能、界面和平台修复。沿用 Python、PySide6、精简版 FFmpeg 及原作者的角色与动作体系。不要将本仓库视为原作者的官方发布，也绝无长期维护的可能。
+基于 [jingh12312-rgb/bailong-desktop-pet](https://github.com/jingh12312-rgb/bailong-desktop-pet) 与 [Joseph-Blue 的 opt.23 优化分支](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization)，保留白龙娘的 35 段动作、拖动、吸边、自移动及 Codex 联动，进一步降低常驻内存、减少无效提醒并改善额度查询体验。
 
-**本项目也不是我正在进行的另一个 MacOS Swift + Appkit 原生移植、独立维护的项目，注意区分。**
+当前版本 **0.5.1-local.2**，维护分支 **`local/windows`**。本分支完成了 Windows x64 验证；macOS 入口继承上游，尚未在本分支验收。
 
-## 这次解决的痛点与新增功能
+## 主要改动
 
-围绕原版启动等待长、运行内存占用高和发布包较大的问题，这次主要做了以下优化，并增加了性能监视与调节功能：
-
-- **启动时长大幅缩短。** 从启动时预加载全部动作，改为先加载当前动作的首批画面，让桌宠更快出现，后续画面随播放补充。
-- **运行内存（RAM）占用大幅减少。** 不再把全部动作的画面长期留在内存中，默认仅缓冲 12 帧；切换动作时释放旧缓冲，隐藏时暂停预读，减少后台资源占用。
-- **安装包体积瘦身。** 使用专门用于桌宠动画播放的精简 FFmpeg，并清理 Windows 包中未使用的运行库组件，减少下载体积和安装后的磁盘占用；最高画质仍为 720×720。
-- **新增性能监视浮窗和性能设置面板。** 浮窗实时显示运行帧率、CPU 与运行内存（RAM）占用、帧缓冲等信息；设置面板可调整画质、帧率和预加载帧数，也可开启当前动作整段预加载，调整即时保存并生效，方便按设备性能选择合适的配置。
-- **补充 macOS（Apple Silicon / arm64）的少量系统级优化。** 调整窗口层级、跨桌面与全屏空间行为，修复窗口标志冲突和失焦隐藏，并使用独立的数据目录，改善与 macOS 的配合。
-- **优化构建脚本。** Windows、macOS 均提供一键构建入口，自动补齐依赖与动画素材；下载时显示进度、大小和网速。macOS 首次构建自动编译精简 FFmpeg，后续复用，并统一完成图标生成、打包与归档。
-
-这些改动沿用原作者的角色、动作与交互体系，整理为可反哺原项目的优化和修复。
-
-当前版本 **0.5.1-opt.23**，分支 `joseph/optimization`。仅发布 **Windows x86_64** 与 **macOS Apple Silicon arm64**；Linux 支援暂停，三阵营构建入口已移除。
-
-[原作者版本改动对照](docs/原作者版本改动对照.md) · [构建说明](BUILDING.md) · [开发约定](DEVELOPMENT.md) · [更新记录](CHANGELOG.md) · [素材来源](ASSETS.md)
-
-## 下载与使用
-
-完整运行包见 [Release](https://github.com/Joseph-Blue/bailong-desktop-pet-optimization/releases/tag/v0.5.1-opt.23)。附件按平台完成后上传，页面只列已上传的下载链接。
-
-- Windows：完整解压 ZIP，运行 `BailongPet/BailongPet.exe`；保留同目录的运行库、素材和解码器。
-- macOS：解压后运行 `BailongPet.app`。包采用本地 ad-hoc 签名，未做 Apple 公证。
-- 对话、额度和任务同步使用用户自己的 Codex 安装与登录；发布包不包含账号或历史记录。
-
-## 相对作者版本的主要改动
-
-| 范围 | 当前实现 |
+| 功能 | 行为 |
 | --- | --- |
-| 动画加载 | 后台按当前动作解码，有限预加载；隐藏暂停，切换取消旧解码 |
-| 性能设置 | 默认 512×512、12 帧、素材原帧率；最高 720×720；设置即时生效 |
-| 性能统计 | FPS、主进程与 FFmpeg 的 CPU／RAM、帧缓冲、硬件和连接信息；悬停全文、复制信息，无分组“详情”按钮 |
-| 任务与气泡 | 外部同步会话只读；工具状态临时显示；任务气泡按实际内容收缩，长结果可滚动，保留气泡“详情” |
-| macOS | 修复 Space 标志冲突、失焦隐藏、数据目录冲突；桌宠、气泡及临时输入窗不跟入全屏空间 |
-| 构建 | 两平台使用精简 FFmpeg；素材自动下载，显示大小、百分比和网速；不执行 SHA-256 校验 |
-| 素材与图标 | 35 段中替换四段 Alpha 修复 WebM；Windows EXE 与 macOS App 图标使用修复 idle 第一帧 |
+| 低内存动画 | 后台流式解码，默认 12 帧缓冲；快速切换取消旧解码，隐藏时暂停 |
+| 常用动作缓存 | 缓存常用动作的开头帧，上限 24 MiB，预读待机、拖动和落地等动作 |
+| 自适应清晰度 | 根据桌宠实际大小与所在窗口的 DPI 调整分辨率，最高 720×720 |
+| 动画调度 | 按素材帧率刷新，移动与吸边过渡保留 16 ms 更新 |
+| 性能设置 | 省内存、均衡、高清档位；支持单独调整分辨率、帧率和缓冲 |
+| 额度查询 | 先显示缓存和更新时间，较旧时后台刷新；合并重复请求，失败保留上次记录 |
+| 常驻额度签 | 可选开启；显示期间每 5 分钟刷新，隐藏时不自动查询 |
+| 提醒分级 | 单次工具失败不主动弹气泡；整轮失败、权限确认及完成提醒保留 |
+| 启动联动 | 右键菜单可切换随 Codex / GPT 自动启动 |
+| 透明边缘 | 两段待机、拖动、落地采用上游 Alpha 清理素材，处理部分帧的边缘色块 |
 
-原作者已有的拖动、吸边、自移动、额度、对话、任务提醒与透明解码不计为本次新增。完整差异与验收状态见 [改动对照](docs/原作者版本改动对照.md)。
+默认使用「均衡」：自适应清晰度、素材原帧率、12 帧缓冲。常驻额度签默认关闭。额度缓存 60 秒内复用，失败后的请求间隔至少 15 秒。
 
-## 本地构建
+## 获取与构建
 
-使用目标平台的 64 位 Python 3.11～3.13。
+本仓库提供源码和构建入口，动画从上游素材 Release 按需下载。
+
+1. 安装 Windows x64 的 Python 3.11～3.13。
+2. 克隆本仓库，打开 PowerShell，执行：
 
 ```powershell
-# Windows PowerShell 5.1 或 7+
+git clone --branch local/windows https://github.com/moon135246/bailong-desktop-pet-optimization.git
+cd bailong-desktop-pet-optimization
 .\build-windows.ps1 -Zip
 ```
 
-```bash
-# macOS；预先安装 Xcode Command Line Tools 与 pkg-config
-bash build-macos.sh --archive
+输出目录：`dist-windows/build-v0.5.1-local.2/BailongPet/`。运行其中的 `BailongPet.exe`，保留完整目录。
+
+已有依赖环境和完整素材时，也可运行：
+
+```powershell
+python work/build_windows_optimized.py --existing-assets --zip
 ```
 
-macOS 首次构建自动编译精简 FFmpeg，之后复用；Windows 使用仓库内的精简 `tools/ffmpeg.exe`。素材下载需要本私有仓库读取权限，可使用 GitHub CLI 登录或 `GH_TOKEN`／`GITHUB_TOKEN`。完整参数见 [BUILDING.md](BUILDING.md)。
+完整命令、素材准备和依赖说明见 [BUILDING.md](BUILDING.md)。
 
+## 使用
 
-## 素材与文档边界
+- 单击互动，双击查询 Codex 额度；拖动可移动桌宠。
+- 右键打开「性能设置」「性能统计」，或开启「常驻显示额度」。
+- 右键「随 Codex / GPT 自动启动」控制启动联动。
+- 动画可独立运行；额度、对话与任务同步使用使用者自己的 Codex 安装和登录。
 
-角色素材作者为 **jingh12312-rgb**。默认使用 [修复素材包](docs/修复素材备选包.md)：idle、idle2、drag、landing 保留 720×720、24 FPS 和原时长，以透明 WebM 分发，其余 31 段保留作者原文件。
+## 验证与性能
 
-原作者的 `RELEASE_NOTES.md`、`BUILD_INFO.json`、`先看我-安装说明.txt` 及素材／运行库许可原样保留，记录的是原作版本；本轮说明以本 README、BUILDING、CHANGELOG 和改动对照为准。
+已完成专项回归、Windows 打包自检、真实只读额度连接检查，以及四段修复动画的 336 帧对照。35 段动画首帧解码和缓冲上限检查通过，其余 31 段动画与原安装文件逐字节一致。
+
+在同一台 Windows 电脑上，原版运行内存约 2.4～2.7 GB，优化版一次采样约 222 MiB，包含桌宠、FFmpeg 和启动监听。RSS 汇总可能重复计入共享页；这是实测样本，不代表所有设备。范围、方法与上游已有测试问题见 [Windows 验证记录](docs/WINDOWS_VALIDATION.md)。
+
+## 来源与署名
+
+- 角色、35 段动作及原始项目：**jingh12312-rgb**。
+- 流式解码、性能窗口、精简 FFmpeg 与四段透明边缘修复基础：**Joseph-Blue**，本分支基于其 `opt.23` 之后的提交 `11abecbc8a78e9c734e73028472c4d2bb1c362f5`。
+- 本仓库的 Windows 缓存、额度、提醒与调度改进：**moon135246**。
+
+原项目、素材和运行库的来源与许可说明保留，见 [ASSETS.md](ASSETS.md)。Git 仓库不包含整段动画、本机账号、聊天记录、额度缓存或虚拟环境。原作者的 `BUILD_INFO.json`、`RELEASE_NOTES.md` 和原始安装说明作为历史发行记录保留；当前版本以本 README、`app/version.py` 和 [CHANGELOG.md](CHANGELOG.md) 为准。

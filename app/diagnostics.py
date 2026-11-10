@@ -330,6 +330,9 @@ class DiagnosticsWindow(QWidget):
             resources.append(('整段预加载', f'{buffered["buffered"]} / {count if count is not None else "—"} 帧'))
         else:
             resources.append(('动画缓冲', f'{buffered["buffered"]} / {buffered["capacity"]} 帧'))
+        resources.append(('常用动作缓存', f'{byte_text(buffered.get("warmBytes",0))} / 24 MiB'))
+        resources.append(('缓存命中', buffered.get('cacheHits',0)))
+        resources.append(('动画计时间隔', f'{pet.tick.interval()} ms'))
         self.resources.set_rows(resources)
         sync = pet.desktop_sync
         watching = '观察中' if sync.timer.isActive() else '已停止'

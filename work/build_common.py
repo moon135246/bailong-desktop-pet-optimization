@@ -21,13 +21,17 @@ def check_python():
         raise SystemExit('请使用 64 位 Python。')
 
 
-def build_inputs(ffmpeg_arg=None):
-    ensure_assets()
+def build_inputs(ffmpeg_arg=None, existing_assets=False):
+    if not existing_assets:
+        ensure_assets()
     assets = ROOT / 'outputs/白龙桌宠素材'
     manifest_path = assets / '素材清单.json'
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     items = animation_items(manifest)
     paths = animation_paths(manifest)
+    for path in paths:
+        if not (assets / path).is_file():
+            raise SystemExit(f'缺少动画素材：{path}')
     for item in items:
         item.pop('source', None)
     ffmpeg = None
@@ -110,12 +114,12 @@ def place_ffmpeg(output, target, source):
         bundled.symlink_to(os.path.relpath(collected, bundled.parent))
 
 
-def build_desktop(target, ffmpeg_arg=None):
+def build_desktop(target, ffmpeg_arg=None, existing_assets=False):
     expected = {'windows': 'win32', 'macos': 'darwin'}[target]
     if sys.platform != expected:
         raise SystemExit(f'{target} 包必须在对应系统构建，不支持交叉编译。')
     check_python()
-    inputs = build_inputs(ffmpeg_arg)
+    inputs = build_inputs(ffmpeg_arg, existing_assets=existing_assets)
     arch = platform.machine().lower()
     arch = {'amd64': 'x86_64', 'x64': 'x86_64', 'aarch64': 'arm64'}.get(arch, arch)
     if target == 'windows':
